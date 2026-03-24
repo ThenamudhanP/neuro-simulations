@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Detection Theory: Tiger vs Wind</title>
+    <style>
+        :root {
+            --bg-dark: #121214; --panel-bg: #1e1e24; --canvas-bg: #0d0d12;
+            --wind-color: #3b82f6; --tiger-color: #ef4444; --z-color: #facc15;
+            --text-main: #f8fafc; --text-muted: #94a3b8; --border: #334155;
+        }
+        body { margin: 0; padding: 20px; background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; box-sizing: border-box; }
+        #app-container { background-color: var(--panel-bg); border-radius: 12px; padding: 20px; width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 15px; border: 1px solid var(--border); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+        #header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--border); padding-bottom: 10px;}
+        h1 { margin: 0; font-size: 1.3rem; color: var(--text-main); }
+        .subtitle { font-size: 0.85rem; color: var(--text-muted); }
+        
+        #dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 0.85rem; font-weight: bold; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        select { background-color: var(--canvas-bg); color: var(--text-main); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 0.95rem; cursor: pointer; outline: none; }
+        select:focus { border-color: var(--z-color); }
+        
+        #canvas-wrapper { background-color: var(--canvas-bg); border-radius: 8px; border: 2px solid var(--border); position: relative; height: 400px; width: 100%; }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        #logic-readout { background: rgba(250, 204, 21, 0.1); border-left: 4px solid var(--z-color); padding: 15px; border-radius: 0 6px 6px 0; font-family: monospace; font-size: 0.95rem; line-height: 1.5; }
+        .highlight-z { color: var(--z-color); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <div id="header">
+            <div>
+                <h1>Signal Detection Theory (SDT)</h1>
+                <div class="subtitle">Dynamic Bayesian Decision Threshold Optimization</div>
+            </div>
+        </div>
+
+        <div id="dashboard">
+            <div class="control-group">
+                <label>1. Environment (Prior Probability)</label>
+                <select id="env-select">
+                    <option value="0.99">Coffee Shop (99% Safe, 1% Tiger)</option>
+                    <option value="0.80">Forest Edge (80% Safe, 20% Tiger)</option>
+                    <option value="0.20" selected>Deep Jungle (20% Safe, 80% Tiger)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>2. Primary Survival Focus (Cost Trade-off)</label>
+                <select id="cost-select">
+                    <option value="survive" selected>Avoid Death (Miss = Eaten by Tiger)</option>
+                    <option value="energy">Conserve Energy (False Alarm = Panic Running)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="canvas-wrapper">
+            <canvas id="sim"></canvas>
+        </div>
+
+        <div id="logic-readout" id="logic-text">
+            Initializing brain mathematics...
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('sim');
+        const ctx = canvas.getContext('2d');
+        const readout = document.getElementById('logic-readout');
+        const envSelect = document.getElementById('env-select');
+        const costSelect = document.getElementById('cost-select');
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Statistical parameters for our two bell curves
+        const wind = { mean: canvas.width * 0.35, std: 60 };
+        const tiger = { mean: canvas.width * 0.65, std: 60 };
+        
+        let targetZ = canvas.width / 2; 
+        let currentZ = canvas.width / 2; 
+
+        function gaussian(x, mean, std) {
+            return (1 / (std * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / std, 2));
+        }
+
+        function calculateThreshold() {
+            // 1. Get Priors (Probability)
+            const probSafe = parseFloat(envSelect.value);
+            const probTiger = 1 - probSafe;
+            
+            // 2. Assign Specific Costs based on the new Dropdown
+            let costMiss, costFA;
+            
+            if (costSelect.value === "survive") {
+                // Focus: Don't get eaten. 
+                // Penalty for Miss is massive (50). Penalty for panic running is tiny (1).
+                costMiss = 50;  
+                costFA = 1;     
+            } else {
+                // Focus: Conserve energy (Maybe the animal is starving and cannot afford to run).
+                // Penalty for Panic Running is massive (20). Penalty for a miss is lower (2).
+                costMiss = 2;   
+                costFA = 20;    
+            }
+            
+            // 3. The Literal SDT Math Formula (Log Likelihood Ratio)
+            const priorRatio = probSafe / probTiger;
+            const costRatio = costFA / costMiss; 
+            
+            // ln(Beta) * Scale Factor
+            let shift = Math.log(priorRatio * costRatio) * 40; 
+            
+            // Apply the math shift to the center of the graph
+            const center = (wind.mean + tiger.mean) / 2;
+            targetZ = center + shift;
+            targetZ = Math.max(100, Math.min(canvas.width - 100, targetZ));
+            
+            updateReadout(probTiger, costSelect.value, shift);
+        }
+
+        function updateReadout(probTiger, focus, shift) {
+            let envText = probTiger > 0.5 ? "Jungle (High Danger Prior)" : "Coffee Shop (Low Danger Prior)";
+            let focusText = focus === "survive" ? "Avoiding Death (Miss = Fatal)" : "Conserving Energy (False Alarm = Exhaustion)";
+            let dirText = shift < 0 ? "LEFT (Lowering standard of evidence)" : "RIGHT (Raising standard of evidence)";
+            
+            let resultText = shift < 0 
+                ? "You will suffer more False Alarms (panic running), but you guarantee you won't get eaten." 
+                : "You demand strong evidence before running to save energy, increasing the risk of a Miss.";
+
+            readout.innerHTML = `<strong>Brain Logic:</strong> Environment is <span style="color:#ef4444">${envText}</span>. Primary focus is <span style="color:#ef4444">${focusText}</span>.<br>
+            <strong>Action:</strong> Threshold <span class="highlight-z">z</span> shifts ${dirText}.<br>
+            <strong>Result:</strong> ${resultText}`;
+        }
+
+        function drawCurve(mean, std, color, label, isRightOfZ, zLine) {
+            ctx.beginPath();
+            for (let x = 0; x < canvas.width; x++) {
+                let y = canvas.height - (gaussian(x, mean, std) * 15000); 
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            for (let x = 0; x < canvas.width; x++) {
+                let y = canvas.height - (gaussian(x, mean, std) * 15000);
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.closePath();
+            
+            ctx.save();
+            ctx.beginPath();
+            if (isRightOfZ) {
+                ctx.rect(zLine, 0, canvas.width - zLine, canvas.height);
+            } else {
+                ctx.rect(0, 0, zLine, canvas.height);
+            }
+            ctx.clip();
+            ctx.fillStyle = color.replace('1)', '0.3)'); 
+            ctx.fill();
+            ctx.restore();
+
+            ctx.fillStyle = color;
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText(label, mean - 20, 30);
+        }
+
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            currentZ += (targetZ - currentZ) * 0.05;
+
+            drawCurve(wind.mean, wind.std, 'rgba(59, 130, 246, 1)', 'WIND (Noise)', true, currentZ);
+            drawCurve(tiger.mean, tiger.std, 'rgba(239, 68, 68, 1)', 'TIGER (Signal)', true, currentZ);
+
+            ctx.beginPath();
+            ctx.moveTo(currentZ, 0);
+            ctx.lineTo(currentZ, canvas.height);
+            ctx.strokeStyle = "var(--z-color)";
+            ctx.lineWidth = 4;
+            ctx.setLineDash([10, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.fillStyle = "var(--z-color)";
+            ctx.font = "bold 18px monospace";
+            ctx.fillText("Threshold (z)", currentZ + 10, canvas.height - 20);
+
+            requestAnimationFrame(loop);
+        }
+
+        envSelect.addEventListener('change', calculateThreshold);
+        costSelect.addEventListener('change', calculateThreshold);
+
+        calculateThreshold(); 
+        loop(); 
+    </script>
+</body>
+</html>

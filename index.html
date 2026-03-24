@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuro-Simulations Portfolio</title>
+    <style>
+        :root {
+            --bg-dark: #0b1120;
+            --accent: #3b82f6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Stops the main page from scrolling */
+        }
+
+        /* --- THE NAVIGATION BAR --- */
+        #navbar {
+            background-color: transparent; /* Made perfectly transparent */
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05); /* Subtle, sleek line */
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--text-main);
+            letter-spacing: 1px;
+        }
+        .logo span { color: var(--accent); }
+
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: 2px solid transparent;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* The button that is currently selected */
+        .nav-btn.active {
+            color: var(--accent);
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* --- THE DISPLAY WINDOW --- */
+        #sim-window {
+            flex-grow: 1; /* Takes up all remaining space */
+            width: 100%;
+            border: none;
+            background-color: transparent;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar">
+        <div class="logo"><span>Neuro-Simulations</span></div>
+        <div class="nav-buttons">
+            <button class="nav-btn active" onclick="loadSim('cricket.html', this)">🦗 Population Vectors</button>
+            <button class="nav-btn" onclick="loadSim('tiger.html', this)">🐅 Signal Detection</button>
+            <button class="nav-btn" onclick="loadSim('bayes.html', this)">👮 Bayesian Brain</button>
+        </div>
+    </div>
+
+    <iframe id="sim-window" src="cricket.html"></iframe>
+
+    <script>
+        // This tiny script changes the website inside the window and highlights the clicked button
+        function loadSim(filename, buttonElement) {
+            // 1. Change the iframe source to the new file
+            document.getElementById('sim-window').src = filename;
+
+            // 2. Remove the 'active' blue glow from all buttons
+            let buttons = document.getElementsByClassName('nav-btn');
+            for (let i = 0; i < buttons.length; i++) {
+                buttons[i].classList.remove('active');
+            }
+
+            // 3. Add the 'active' blue glow to the button that was just clicked
+            buttonElement.classList.add('active');
+        }
+    </script>
+</body>
+</html>

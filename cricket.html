@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cercal System Simulator (Updated Physics)</title>
+    <style>
+        /* --- THE SCIENTIFIC UI/UX --- */
+        :root {
+            --bg-dark: #121214; --panel-bg: #1e1e24; --canvas-bg: #0d0d12;
+            --accent-blue: #60a5fa; --accent-green: #4ade80;
+            --n-color: #ef4444; --e-color: #3b82f6; --s-color: #10b981; --w-color: #f59e0b;
+            --text-main: #f8fafc; --text-muted: #94a3b8; --border: #334155;
+        }
+        body { margin: 0; padding: 20px; background-color: var(--bg-dark); color: var(--text-main); font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; box-sizing: border-box; }
+        #app-container { background-color: var(--panel-bg); border-radius: 12px; padding: 20px; width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 15px; border: 1px solid var(--border); }
+        #header { display: flex; justify-content: space-between; align-items: flex-end; }
+        h1 { margin: 0; font-size: 1.1rem; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; }
+        #telemetry { display: flex; gap: 12px; font-family: monospace; font-size: 0.8rem; font-weight: bold; }
+        .stat-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .stat-label { font-size: 0.6rem; letter-spacing: 1px; color: black; border-radius: 2px; padding: 0 3px;}
+        .v-data { color: white; border-radius: 3px; padding: 1px 4px; background: rgba(0,0,0,0.3);}
+        #canvas-wrapper { background-color: var(--canvas-bg); border-radius: 8px; border: 2px solid var(--border); overflow: hidden; position: relative; height: 450px; }
+        canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+        #controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; }
+        .control-group { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; font-weight: 600; }
+        input[type="range"] { flex-grow: 1; accent-color: var(--accent-blue); }
+        .val-box { background: var(--canvas-bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; font-family: monospace; min-width: 30px; text-align: center; }
+        button { background-color: #312e81; color: white; border: 1px solid #4338ca; border-radius: 6px; padding: 8px 16px; font-weight: bold; cursor: pointer; height: 100%; }
+        button:hover { background-color: #4338ca; }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div id="header">
+            <h1>Cercal System simulator</h1>
+            <div id="telemetry">
+                <div class="stat-col"><span class="stat-label v-data" style="background:var(--n-color);color:white">N-RATE</span><span id="t-N" class="v-data">0.00</span></div>
+                <div class="stat-col"><span class="stat-label v-data" style="background:var(--e-color);color:white">E-RATE</span><span id="t-E" class="v-data">0.00</span></div>
+                <div class="stat-col"><span class="stat-label v-data" style="background:var(--s-color);color:white">S-RATE</span><span id="t-S" class="v-data">0.00</span></div>
+                <div class="stat-col"><span class="stat-label v-data" style="background:var(--w-color);color:white">W-RATE</span><span id="t-W" class="v-data">0.00</span></div>
+                <div class="stat-col"><span class="stat-label" style="background:white;color:black;border-radius:3px;padding:1px 4px;">STATE</span><span id="t-STATE" class="v-data">STILL</span></div>
+            </div>
+        </div>
+        <div id="canvas-wrapper">
+            <canvas id="sim"></canvas>
+        </div>
+        <div id="controls">
+            <div class="control-group"><label>Neural Gain</label><input type="range" id="c-gain" min="0.5" max="3" step="0.1" value="1.5"><div class="val-box" id="v-gain">1.5</div></div>
+            <div class="control-group"><label>Detection Radius</label><input type="range" id="c-rad" min="50" max="250" step="10" value="120"><div class="val-box" id="v-rad">120</div></div>
+            <div class="control-group" style="grid-column: 1 / 2;"><label>Jump Power</label><input type="range" id="c-pow" min="300" max="1500" step="50" value="800"><div class="val-box" id="v-pow">800</div></div>
+            <button id="btn-reset" style="grid-column: 2 / 4;">Reset Cricket</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('sim'); const ctx = canvas.getContext('2d');
+        function resize() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
+        window.addEventListener('resize', resize); resize();
+
+        let settings = { gain: 1.5, radius: 120, power: 800 };
+        let state = "STILL"; let mouse = { x: -1000, y: -1000 };
+        // Increase mass (size) slightly for better boundary feel
+        let cricket = { x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0, size: 20 }; 
+        let rates = { N: 0, E: 0, S: 0, W: 0 };
+
+        const tN = document.getElementById('t-N'); const tE = document.getElementById('t-E'); const tS = document.getElementById('t-S'); const tW = document.getElementById('t-W'); const tState = document.getElementById('t-STATE');
+        document.getElementById('c-gain').addEventListener('input', (e) => { settings.gain = parseFloat(e.target.value); document.getElementById('v-gain').innerText = settings.gain.toFixed(1); });
+        document.getElementById('c-rad').addEventListener('input', (e) => { settings.radius = parseInt(e.target.value); document.getElementById('v-rad').innerText = settings.radius; });
+        document.getElementById('c-pow').addEventListener('input', (e) => { settings.power = parseInt(e.target.value); document.getElementById('v-pow').innerText = settings.power; });
+        document.getElementById('btn-reset').addEventListener('click', () => { cricket.x = canvas.width / 2; cricket.y = canvas.height / 2; cricket.vx = 0; cricket.vy = 0; state = "STILL"; });
+        canvas.addEventListener('mousemove', (e) => { const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; });
+
+        function drawPill(x, y, text) {
+            ctx.font = "bold 10px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            let width = ctx.measureText(text).width + 12; ctx.beginPath();
+            ctx.roundRect(x - width/2, y - 9, width, 18, 9);
+            ctx.fillStyle = "white"; ctx.fill(); ctx.fillStyle = "black"; ctx.fillText(text, x, y);
+        }
+
+        function drawArrow(fromX, fromY, toX, toY, color) {
+            const headlen = 10; const dx = toX - fromX; const dy = toY - fromY;
+            if(Math.hypot(dx,dy) < 1) return; // Don't draw tiny arrows
+            const angle = Math.atan2(dy, dx); ctx.beginPath();
+            ctx.moveTo(fromX, fromY); ctx.lineTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(toX, toY); ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
+        }
+
+        // --- CHANGE 3: ADVANCED CANVAS-DRAWN TRANSLUCENT CRICKET ---
+        function drawRealisticCricket(x, y, angle, size) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.globalAlpha = 0.7; // Translucency
+            const bodyColor = "#8b5a2b"; const wingColor = "rgba(230, 220, 200, 0.5)"; const lineColor = "#5c3c1f";
+            
+            // 1. Leg base structures
+            ctx.lineWidth = 2; ctx.strokeStyle = lineColor;
+            [[-1,-0.5], [-1,0.5]].forEach(s => { ctx.beginPath(); ctx.moveTo(-5*s[0], 0); ctx.lineTo(-10*s[0], 15*s[1]); ctx.lineTo(-20*s[0], 25*s[1]); ctx.stroke(); });
+            
+            // 2. Translucent Wings (Bezier Curves)
+            ctx.beginPath(); ctx.moveTo(-5, 0); ctx.bezierCurveTo(-15, -12, -40, -8, -45, 0); ctx.bezierCurveTo(-40, 8, -15, 12, -5, 0); ctx.fillStyle = wingColor; ctx.fill(); ctx.strokeStyle = "rgba(100,100,100,0.3)"; ctx.stroke();
+            
+            // 3. Body Ellipse (Gradient)
+            ctx.beginPath(); let grd = ctx.createRadialGradient(-10, 0, 0, -10, 0, 20); grd.addColorStop(0, "#a07850"); grd.addColorStop(1, bodyColor);
+            ctx.ellipse(-10, 0, 22, 9, 0, 0, Math.PI * 2); ctx.fillStyle = grd; ctx.fill(); ctx.strokeStyle = lineColor; ctx.lineWidth = 1.5; ctx.stroke();
+            
+            // 4. Head
+            ctx.beginPath(); ctx.ellipse(12, 0, 7, 6, 0, 0, Math.PI * 2); ctx.fillStyle = "#a07850"; ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(15, -3, 2, 0, Math.PI * 2); ctx.fillStyle = "black"; ctx.fill(); ctx.beginPath(); ctx.arc(15, 3, 2, 0, Math.PI * 2); ctx.fill();
+            
+            // 5. Antennae
+            ctx.beginPath(); ctx.moveTo(18, -2); ctx.quadraticCurveTo(30, -15, 50, -20); ctx.moveTo(18, 2); ctx.quadraticCurveTo(30, 15, 50, 20); ctx.strokeStyle = lineColor; ctx.lineWidth = 0.5; ctx.stroke();
+            
+            // 6. Cerci (Antennas on backside) - Firing Units
+            ctx.beginPath(); ctx.moveTo(-32, -3); ctx.lineTo(-45, -8); ctx.moveTo(-32, 3); ctx.lineTo(-45, 8); ctx.strokeStyle = "#e0c090"; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.arc(-10, 0, 3, 0, Math.PI * 2); ctx.fillStyle = "var(--accent-blue)"; ctx.fill(); // Core dot
+
+            ctx.restore();
+        }
+
+        // --- THE MAIN PHYSICS & MATH LOOP ---
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Math: Cosine Tuning for Neurons (Only when still)
+            let dx = mouse.x - cricket.x; let dy = mouse.y - cricket.y; let distance = Math.hypot(dx, dy); let angleToMouse = Math.atan2(dy, dx);
+            
+            if (state === "STILL" && distance < 450) { 
+                // --- CHANGE 2: NORTH/SOUTH CORRECTED ---
+                // Canvas Y increases downwards. Negative dy means mouse is above cricket (North).
+                // Mathematical preferred angles (C_a): E=0, S=PI/2, W=PI, N=-PI/2
+                rates.E = Math.max(0, Math.cos(angleToMouse - 0)) * settings.gain;
+                rates.W = Math.max(0, Math.cos(angleToMouse - Math.PI)) * settings.gain;
+                
+                // Swapped interpretation logic based on feedback: Mouse 'above' now causes NORTH Rate.
+                // Standard Math Definition: Mouse above -> angle is -PI/2. Cos(-PI/2 - (-PI/2)) = 1.
+                rates.S = Math.max(0, Math.cos(angleToMouse - Math.PI/2)) * settings.gain; // Standard PI/2
+                rates.N = Math.max(0, Math.cos(angleToMouse - (-Math.PI/2))) * settings.gain; // Standard -PI/2
+            } else { rates.N = 0; rates.E = 0; rates.S = 0; rates.W = 0; }
+
+            // Update Telemetry UI
+            tN.innerText = rates.N.toFixed(2); tE.innerText = rates.E.toFixed(2); tS.innerText = rates.S.toFixed(2); tW.innerText = rates.W.toFixed(2);
+            tState.innerText = state; tState.style.color = state === "JUMPING" ? "var(--accent-blue)" : "var(--text-main)";
+
+            // 2. Physics: Boundary Checks and Movement
+            cricket.x += cricket.vx; cricket.y += cricket.vy;
+            cricket.vx *= 0.94; cricket.vy *= 0.94; // Higher friction
+
+            // --- CHANGE 1: BOUNDARIES (BOUNCING) ---
+            if (cricket.x < cricket.size) { cricket.x = cricket.size; cricket.vx *= -0.7; }
+            if (cricket.x > canvas.width - cricket.size) { cricket.x = canvas.width - cricket.size; cricket.vx *= -0.7; }
+            if (cricket.y < cricket.size) { cricket.y = cricket.size; cricket.vy *= -0.7; }
+            if (cricket.y > canvas.height - cricket.size) { cricket.y = canvas.height - cricket.size; cricket.vy *= -0.7; }
+
+            if (state === "JUMPING" && Math.abs(cricket.vx) < 0.2 && Math.abs(cricket.vy) < 0.2) { state = "STILL"; cricket.vx=0; cricket.vy=0;}
+
+            // 3. Draw Background elements
+            ctx.beginPath(); ctx.arc(cricket.x, cricket.y, settings.radius, 0, Math.PI * 2); ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.setLineDash([5, 10]); ctx.stroke(); ctx.setLineDash([]);
+            if (state === "STILL") { ctx.beginPath(); ctx.moveTo(mouse.x, mouse.y); ctx.lineTo(cricket.x, cricket.y); ctx.strokeStyle = "rgba(255,255,255,0.06)"; ctx.lineWidth = 1; ctx.stroke(); drawPill(mouse.x, mouse.y, "WIND SENSOR"); }
+
+            // 4. --- POPULATION VECTOR FORMULA (EXACT) ---
+            // Sum(rate_i * C_a_i). N pref is (0,-1), E is (1,0), S is (0,1), W is (-1,0)
+            let popX = (rates.E - rates.W);
+            let popY = (rates.S - rates.N); // Standard canvas dy space
+            
+            // 5. Draw Vectors (Visualize current sensation)
+            if (state === "STILL" && distance < 450 && (popX !== 0 || popY !== 0)) {
+                let s = 40; // visual scale
+                drawArrow(cricket.x, cricket.y, cricket.x + rates.E*s, cricket.y, "var(--e-color)");
+                drawArrow(cricket.x, cricket.y, cricket.x - rates.W*s, cricket.y, "var(--w-color)");
+                drawArrow(cricket.x, cricket.y, cricket.x, cricket.y + rates.S*s, "var(--s-color)");
+                drawArrow(cricket.x, cricket.y, cricket.x, cricket.y - rates.N*s, "var(--n-color)");
+
+                let escX = cricket.x - (popX * s); // JUMP AWAY (-pop)
+                let escY = cricket.y - (popY * s);
+                drawArrow(cricket.x, cricket.y, escX, escY, "white");
+                drawPill(escX, escY + 16, "ESCAPE VECTOR");
+            }
+
+            // 6. Draw Cricket (orientation points to velocity or sensory angle)
+            let drawAngle = state === "JUMPING" ? Math.atan2(cricket.vy, cricket.vx) : angleToMouse + Math.PI; 
+            drawRealisticCricket(cricket.x, cricket.y, drawAngle, cricket.size);
+
+            // 7. Trigger Logic
+            if (state === "STILL" && distance < settings.radius) {
+                state = "JUMPING";
+                let jumpForce = settings.power / 50;
+                cricket.vx = -popX * jumpForce; // Apply inverse pop vector
+                cricket.vy = -popY * jumpForce;
+            }
+            requestAnimationFrame(loop);
+        }
+        loop();
+    </script>
+</body>
+</html>
